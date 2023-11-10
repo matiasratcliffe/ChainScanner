@@ -59,8 +59,8 @@ def captureBlockTransactions():
                         functionName = "SELL"
                     else:
                         functionName = tx.input[0:4].hex()
-                        captured.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')},{functionName},{tx.hash.hex()}\n")
-                        printDev("\t########### CAPTURED FILE WRITTEN ###########")
+                        #captured.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')},{functionName},{tx.hash.hex()},{tx['from']},{tx['to']}\n")
+                        #printDev("\t########### CAPTURED FILE WRITTEN ###########")
                         continue
                         
                     swapLogs = [log for log in client.get_proxy_transaction_receipt(tx.hash.hex())["logs"] if len(log["data"]) == 258]
