@@ -119,10 +119,10 @@ def get_amount_in(amount_out, reserve_in, reserve_out):
     amount_in = (numerator // denominator) + 1
     return amount_in
 
-def printDev(message):
+def printDev(message, end="\n"):
     global DEBUG
     if DEBUG:
-        print(message)
+        print(message, end=end)
 
 
 if __name__ == "__main__":
