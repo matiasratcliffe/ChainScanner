@@ -4,6 +4,11 @@ import datetime
 import etherscan
 from web3 import Web3
 
+
+# TODO not always WETH is token1
+# TODO sometimes their transaction fails, we need to check if that affects us
+# TODO look where the main RPC is located and run script in azure in same physical location
+
 class PendingTX:
     def __init__(self, tx_hash, to, capturedTimestamp) -> None:
         self.tx_hash = tx_hash
