@@ -28,7 +28,7 @@ def scanPendingTransactions():
             printDev("Getting pending transactions...", end="")
             pending_txns = w3.eth.get_block("pending", full_transactions=True)
             if ("transactions" in pending_txns):
-                printDev(f"{len(pending_txns['transactions'])} transactions pending [Block {pending_txns['transactions'][0]['blockNumber']}]")
+                printDev(f"{len(pending_txns['transactions'])} transactions pending [Block {pending_txns['transactions'][0]['blockNumber']}]", newLine=False)
                 if pending_txns["transactions"][0]["blockNumber"] != pendingBlockNumber:  # si hay cambio de bloque
                     printDev(f"\tBlockChanged! {len(pendingMatchingTransactions)} matching pending transactions are being processed")
                     limitTime = time.time()
@@ -54,7 +54,7 @@ def captureBlockTransactions():
             printDev("Capturing last block of transactions...", end="")
             capturedTransactions = w3.eth.get_block(capturedLastBlockNumber, full_transactions=True).transactions #[tx for tx in w3.eth.get_block(capturedLastBlockNumber, full_transactions=True).transactions if tx.to and tx.to.lower() == contractAddress]
             if (len(capturedTransactions) > 0):
-                printDev(f"Captured {len(capturedTransactions)} transactions [Block {capturedLastBlockNumber}]")
+                printDev(f"Captured {len(capturedTransactions)} transactions [Block {capturedLastBlockNumber}]", newLine=False)
                 for tx in capturedTransactions:
                     if (tx.to and tx.to.lower() != contractAddress.lower()):
                         continue
@@ -78,13 +78,13 @@ def captureBlockTransactions():
                             token1 = w3.eth.contract(address=w3.to_checksum_address(uniswapPair.functions.token1().call()), abi=tokenABI)  # token1 es WETH
                             reserves_after = uniswapPair.functions.getReserves().call()
                             if (functionName == "BUY"):
-                                processBuyTransactionSwap(captured, tx.hash.hex(), log, tokenOut=token0, tokenIn=token1, reserves=reserves_after)
+                                processBuyTransactionSwap(captured, tx, log, tokenOut=token0, tokenIn=token1, reserves=reserves_after)
                             else:
-                                processSellTransactionSwap(captured, tx.hash.hex(), log, tokenOut=token1, tokenIn=token0, reserves=reserves_after)
+                                processSellTransactionSwap(captured, tx, log, tokenOut=token1, tokenIn=token0, reserves=reserves_after)
             else:
                 printDev(f"No transactions where captured [Block {capturedLastBlockNumber}]")
 
-def processBuyTransactionSwap(file, tx_hash, log, tokenOut, tokenIn, reserves):
+def processBuyTransactionSwap(file, tx, log, tokenOut, tokenIn, reserves):
     amount_out = int(log["data"][130:130+64], 16)
     amount_in = int(log["data"][66:130], 16)
     tokenOutSymbol = tokenOut.functions.symbol().call()
@@ -96,10 +96,10 @@ def processBuyTransactionSwap(file, tx_hash, log, tokenOut, tokenIn, reserves):
     else:
         eth_amount = "NotFound"
     multiplier = 10**(tokenOut.functions.decimals().call() - tokenIn.functions.decimals().call())  # ver si esto no es mejor meterlo en los if porque capaz depende del orden
-    file.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')},BUY,{tx_hash},{tokenInSymbol},{tokenOutSymbol},{eth_amount/(multiplier*amount_out)},{eth_amount},{reserves[:2]}\n")
+    file.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')},BUY,{tx.hash.hex()},{tokenInSymbol},{tokenOutSymbol},{eth_amount/(multiplier*amount_out)},{eth_amount},{tx.gas},{tx.gasPrice},{reserves[:2]}\n")
     printDev("\t########### CAPTURED FILE WRITTEN ###########")
 
-def processSellTransactionSwap(file, tx_hash, log, tokenOut, tokenIn, reserves):
+def processSellTransactionSwap(file, tx, log, tokenOut, tokenIn, reserves):
     amount_out = int(log["data"][194:], 16)
     amount_in = int(log["data"][2:66], 16)
     tokenOutSymbol = tokenOut.functions.symbol().call()
@@ -111,7 +111,7 @@ def processSellTransactionSwap(file, tx_hash, log, tokenOut, tokenIn, reserves):
     else:
         eth_amount = "NotFound"
     multiplier = 10**(tokenOut.functions.decimals().call() - tokenIn.functions.decimals().call())  # ver si esto no es mejor meterlo en los if porque capaz depende del orden
-    file.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')},SELL,{tx_hash},{tokenInSymbol},{tokenOutSymbol},{(multiplier*eth_amount)/amount_in},{eth_amount},{reserves[:2]}\n")
+    file.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')},SELL,{tx.hash.hex()},{tokenInSymbol},{tokenOutSymbol},{(multiplier*eth_amount)/amount_in},{eth_amount},{tx.gas},{tx.gasPrice},{reserves[:2]}\n")
     printDev("\t########### CAPTURED FILE WRITTEN ###########")
 
 def get_amount_in(amount_out, reserve_in, reserve_out):
@@ -124,14 +124,30 @@ def get_amount_in(amount_out, reserve_in, reserve_out):
     amount_in = (numerator // denominator) + 1
     return amount_in
 
-def printDev(message, end="\n"):
-    global DEBUG
-    if DEBUG:
-        print(message, end=end)
+def printDev(message, newLine=True, end="\n"):
+    global LOG_TO_FILE, LOG_TO_CONSOLE
+    prefix = f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] " if newLine else ""
+    if LOG_TO_FILE:
+        with open("logs.txt", "a") as f:
+            f.write(f"{prefix}{message}\n")
+    if LOG_TO_CONSOLE:
+        print(f"{prefix}{message}", end=end)
 
+def initializeFile(file_name, initial_line):
+    try:
+        with open(file_name, 'r') as file:
+            pass
+    except FileNotFoundError:
+        with open(file_name, 'w') as file:
+            file.write(initial_line + '\n')
+            printDev(f"File '{file_name}' created.")
 
 if __name__ == "__main__":
-    DEBUG = True
+    LOG_TO_CONSOLE = True
+    LOG_TO_FILE = False
+
+    initializeFile("capturedTransactionHashes.txt", "time,function,tx_hash,tokenIn,tokenOut,execution_price,eth_amount,gas,gas_price,reserves_after")
+    initializeFile("pendingTransactionHashes.txt", "time,tx_hash,tx_to,captured_timestamp,grace_period")
 
     printDev("Initiating Web3 client...")
     rpc_url = "https://ethereum.publicnode.com"
