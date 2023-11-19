@@ -171,5 +171,11 @@ if __name__ == "__main__":
 
     printDev("Scanning has begun!")
     while True:
-        scanPendingTransactions()
-        captureBlockTransactions()
+        try:
+            scanPendingTransactions()
+            captureBlockTransactions()
+        except Exception as e:
+            pendingMatchingTransactions = set({})
+            pendingBlockNumber = w3.eth.block_number + 1
+            capturedLastBlockNumber = 0
+            printDev(f"Exception caught: {e}")
