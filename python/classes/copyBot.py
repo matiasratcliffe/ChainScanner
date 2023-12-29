@@ -1,5 +1,8 @@
 from brownie import accounts, interface, Contract
 
+
+UniswapV2Router02 = w3.eth.contract(address="0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", abi=[{"inputs":[{"internalType":"uint256","name":"amountOut","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"}],"name":"getAmountsIn","outputs":[{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"stateMutability":"view","type":"function"}])
+
 def swap():
     # Connect to an Ethereum network
     network = "mainnet"  # You can use a testnet like "ropsten" for testing
