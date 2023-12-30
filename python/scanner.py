@@ -28,7 +28,7 @@ def scanPendingTransactions():
             printDev("Getting pending transactions...", end="")
             pending_txns = w3.eth.get_block("pending", full_transactions=True)
             if ("transactions" in pending_txns):
-                printDev(f"{len(pending_txns['transactions'])} transactions pending [Block {pending_txns['transactions'][0]['blockNumber']}]", newLine=False)
+                printDev(f"{len(pendingMatchingTransactions)} transactions pending [Block {pendingBlockNumber}]", newLine=False)
                 if pending_txns["transactions"][0]["blockNumber"] != pendingBlockNumber:  # si hay cambio de bloque
                     printDev(f"\tBlockChanged! {len(pendingMatchingTransactions)} matching pending transactions are being processed")
                     limitTime = time.time()
@@ -78,40 +78,40 @@ def captureBlockTransactions():
                             token1 = w3.eth.contract(address=w3.to_checksum_address(uniswapPair.functions.token1().call()), abi=tokenABI)  # token1 es WETH
                             reserves_after = uniswapPair.functions.getReserves().call()
                             if (functionName == "BUY"):
-                                processBuyTransactionSwap(captured, tx, log, tokenOut=token0, tokenIn=token1, reserves=reserves_after)
+                                processBuyTransactionSwap(captured, tx, log, tokenOut=token0, tokenIn=token1, uniswapPair=uniswapPair, reserves=reserves_after)
                             else:
-                                processSellTransactionSwap(captured, tx, log, tokenOut=token1, tokenIn=token0, reserves=reserves_after)
+                                processSellTransactionSwap(captured, tx, log, tokenOut=token1, tokenIn=token0, uniswapPair=uniswapPair, reserves=reserves_after)
             else:
                 printDev(f"No transactions where captured [Block {capturedLastBlockNumber}]")
 
-def processBuyTransactionSwap(file, tx, log, tokenOut, tokenIn, reserves):
+def processBuyTransactionSwap(file, tx, log, tokenOut, tokenIn, uniswapPair, reserves):
     amount_out = int(log["data"][130:130+64], 16)
     amount_in = int(log["data"][66:130], 16)
-    tokenOutSymbol = tokenOut.functions.symbol().call()
-    tokenInSymbol = tokenIn.functions.symbol().call()
-    if (tokenOutSymbol == "WETH"):
-        eth_amount = amount_out / 1e18
-    elif (tokenInSymbol == "WETH"):  #deberia ser el caso
+    if (tokenInSymbol == "WETH"):
         eth_amount = amount_in / 1e18
     else:
-        eth_amount = "NotFound"
+        raise Exception("Transaction not processed in WETH or pair is disordered")
+    tokenOutSymbol = tokenOut.functions.symbol().call()
+    tokenInSymbol = tokenIn.functions.symbol().call()
+    tokenOutAddress = uniswapPair.functions.token0.call()
+    tokenInAddress = uniswapPair.functions.token1.call()
     multiplier = 10**(tokenOut.functions.decimals().call() - tokenIn.functions.decimals().call())  # ver si esto no es mejor meterlo en los if porque capaz depende del orden
-    file.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')},BUY,{tx.hash.hex()},{tokenInSymbol},{tokenOutSymbol},{eth_amount/(multiplier*amount_out)},{eth_amount},{tx.gas},{tx.gasPrice},{reserves[:2]}\n")
+    file.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')},BUY,{tx.hash.hex()},{tokenInSymbol},{tokenOutSymbol},{tokenInAddress},{tokenOutAddress},{uniswapPair.address},{eth_amount/(multiplier*amount_out)},{eth_amount},{tx.gas},{tx.gasPrice},{reserves[:2]}\n")
     printDev("\t########### CAPTURED FILE WRITTEN ###########")
 
-def processSellTransactionSwap(file, tx, log, tokenOut, tokenIn, reserves):
+def processSellTransactionSwap(file, tx, log, tokenOut, tokenIn, uniswapPair, reserves):
     amount_out = int(log["data"][194:], 16)
     amount_in = int(log["data"][2:66], 16)
+    if (tokenOutSymbol == "WETH"):
+        eth_amount = amount_out / 1e18
+    else:
+        raise Exception("Transaction not processed in WETH or pair is disordered")
     tokenOutSymbol = tokenOut.functions.symbol().call()
     tokenInSymbol = tokenIn.functions.symbol().call()
-    if (tokenOutSymbol == "WETH"):  #deberia ser el caso
-        eth_amount = amount_out / 1e18
-    elif (tokenInSymbol == "WETH"):
-        eth_amount = amount_in / 1e18
-    else:
-        eth_amount = "NotFound"
+    tokenOutAddress = uniswapPair.functions.token1.call()
+    tokenInAddress = uniswapPair.functions.token0.call()
     multiplier = 10**(tokenOut.functions.decimals().call() - tokenIn.functions.decimals().call())  # ver si esto no es mejor meterlo en los if porque capaz depende del orden
-    file.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')},SELL,{tx.hash.hex()},{tokenInSymbol},{tokenOutSymbol},{(multiplier*eth_amount)/amount_in},{eth_amount},{tx.gas},{tx.gasPrice},{reserves[:2]}\n")
+    file.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')},SELL,{tx.hash.hex()},{tokenInSymbol},{tokenOutSymbol},{tokenInAddress},{tokenOutAddress},{uniswapPair.address},{(multiplier*eth_amount)/amount_in},{eth_amount},{tx.gas},{tx.gasPrice},{reserves[:2]}\n")
     printDev("\t########### CAPTURED FILE WRITTEN ###########")
 
 def get_amount_in(amount_out, reserve_in, reserve_out):
@@ -129,7 +129,7 @@ def printDev(message, newLine=True, end="\n"):
     prefix = f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] " if newLine else ""
     if LOG_TO_FILE:
         with open("logs.txt", "a") as f:
-            f.write(f"{prefix}{message}\n")
+            f.write(f"{prefix}{message}{end}")
     if LOG_TO_CONSOLE:
         print(f"{prefix}{message}", end=end)
 
@@ -143,11 +143,15 @@ def initializeFile(file_name, initial_line):
             printDev(f"File '{file_name}' created.")
 
 if __name__ == "__main__":
-    LOG_TO_CONSOLE = True
-    LOG_TO_FILE = False
+    TEST = False
+    LOG_TO_CONSOLE = True or TEST
+    LOG_TO_FILE = False and not TEST
 
-    initializeFile("capturedTransactionHashes.txt", "time,function,tx_hash,tokenIn,tokenOut,execution_price,eth_amount,gas,gas_price,reserves_after")
+    initializeFile("capturedTransactionHashes.txt", "time,function,tx_hash,tokenIn,tokenOut,tokenInAddress,tokenOutAddress,uniswapPairAddress,execution_price,eth_amount,gas,gas_price,reserves_after")
     initializeFile("pendingTransactionHashes.txt", "time,tx_hash,tx_to,captured_timestamp,grace_period")
+    if LOG_TO_FILE:
+        with open("logs.txt", "a") as f:
+            f.write(f"#######################################################################\n")
 
     printDev("Initiating Web3 client...")
     rpc_url = "https://ethereum.publicnode.com"
@@ -170,12 +174,19 @@ if __name__ == "__main__":
     capturedLastBlockNumber = 0
 
     printDev("Scanning has begun!")
-    while True:
+    while not TEST:
         try:
             scanPendingTransactions()
             captureBlockTransactions()
         except Exception as e:
-            pendingMatchingTransactions = set({})
-            pendingBlockNumber = w3.eth.block_number + 1
-            capturedLastBlockNumber = 0
-            printDev(f"Exception caught: {e}")
+            while True:
+                try:
+                    pendingMatchingTransactions = set({})
+                    pendingBlockNumber = w3.eth.block_number + 1
+                    capturedLastBlockNumber = 0
+                    printDev(f"Exception caught: {e}")
+                    break
+                except:
+                    printDev("Exception caught while trying to deal with other exception")
+    if TEST:
+        pass

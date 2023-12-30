@@ -1,9 +1,20 @@
 
 
+def get_amount_in(amount_out, reserve_in, reserve_out):
+    assert amount_out > 0, 'INSUFFICIENT_OUTPUT_AMOUNT'
+    assert reserve_in > 0 and reserve_out > 0, 'INSUFFICIENT_LIQUIDITY'
+
+    numerator = reserve_in * amount_out * 1000
+    denominator = (reserve_out - amount_out) * 997
+
+    amount_in = (numerator // denominator) + 1
+    return amount_in
+
 class Token:
-    def __init__(self, token, uniswapPair):
+    def __init__(self, token, uniswapPair, uniswapRouter):
+        self.uniswapRouter = uniswapRouter
         self.token = token
-        #self.hash = token.address??? TODO
+        self.address = token.address
         self.uniswapPair = uniswapPair
     
     def getPriceForSpecificAmount(self, amount) -> int:
@@ -12,14 +23,15 @@ class Token:
     def getAmountForSpecificPrice(self, price) -> int: #tener en cuenta la conversion a decimales y esas weas aca TODO!
         pass
 
-    def getAvailableAmount(self) -> int:
-        pass
+    def getReserves(self) -> (int, int):
+        _output = self.uniswapPair.functions.getReserves().call()
+        return (_output[0], _output[1])
 
     def __hash__(self) -> int:
-        pass
+        return hash(int(self.token.address, 16))
 
     def __eq__(self, __value: object) -> bool:
-        pass
+        return isinstance(__value, Token) and self.__hash__() == __value.__hash__()
 
 class Position:
     def __init__(self, token, amount, price):
@@ -55,13 +67,13 @@ class PositionCollection:
     
     def increasePosition(self, token, amount, price):
         if token in self.positions:
-            self.positions[token].increasePosition(amount, price)
+            self.positions[token.address].increasePosition(amount, price)
         else:
-            self.positions[token] = Position(token, amount, price)
+            self.positions[token.address] = Position(token, amount, price)
     
     def reducePosition(self, token, amount, price) -> bool:
         if token in self.positions:
-            self.positions[token].reducePosition(amount, price)
+            self.positions[token.address].reducePosition(amount, price)
             return True
         else:
             return False
