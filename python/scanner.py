@@ -87,12 +87,12 @@ def captureBlockTransactions():
 def processBuyTransactionSwap(file, tx, log, tokenOut, tokenIn, uniswapPair, reserves):
     amount_out = int(log["data"][130:130+64], 16)
     amount_in = int(log["data"][66:130], 16)
+    tokenOutSymbol = tokenOut.functions.symbol().call()
+    tokenInSymbol = tokenIn.functions.symbol().call()
     if (tokenInSymbol == "WETH"):
         eth_amount = amount_in / 1e18
     else:
         raise Exception("Transaction not processed in WETH or pair is disordered")
-    tokenOutSymbol = tokenOut.functions.symbol().call()
-    tokenInSymbol = tokenIn.functions.symbol().call()
     tokenOutAddress = uniswapPair.functions.token0.call()
     tokenInAddress = uniswapPair.functions.token1.call()
     multiplier = 10**(tokenOut.functions.decimals().call() - tokenIn.functions.decimals().call())  # ver si esto no es mejor meterlo en los if porque capaz depende del orden
