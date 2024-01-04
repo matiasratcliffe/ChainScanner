@@ -102,12 +102,12 @@ def processBuyTransactionSwap(file, tx, log, tokenOut, tokenIn, uniswapPair, res
 def processSellTransactionSwap(file, tx, log, tokenOut, tokenIn, uniswapPair, reserves):
     amount_out = int(log["data"][194:], 16)
     amount_in = int(log["data"][2:66], 16)
+    tokenOutSymbol = tokenOut.functions.symbol().call()
+    tokenInSymbol = tokenIn.functions.symbol().call()
     if (tokenOutSymbol == "WETH"):
         eth_amount = amount_out / 1e18
     else:
         raise Exception("Transaction not processed in WETH or pair is disordered")
-    tokenOutSymbol = tokenOut.functions.symbol().call()
-    tokenInSymbol = tokenIn.functions.symbol().call()
     tokenOutAddress = uniswapPair.functions.token1.call()
     tokenInAddress = uniswapPair.functions.token0.call()
     multiplier = 10**(tokenOut.functions.decimals().call() - tokenIn.functions.decimals().call())  # ver si esto no es mejor meterlo en los if porque capaz depende del orden
