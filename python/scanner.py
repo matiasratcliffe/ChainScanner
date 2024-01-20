@@ -69,6 +69,7 @@ def captureBlockTransactions():
                         continue
                         
                     swapLogs = [log for log in client.get_proxy_transaction_receipt(tx.hash.hex())["logs"] if len(log["data"]) == 258]
+                    swapLogs = [log for log in client.get_proxy_transaction_receipt(hash)["logs"] if len(log["data"]) == 258]
                     if (len(swapLogs) > 0):
                         printDev(f"\tTransaction {tx.hash.hex()} {len(swapLogs)} swaps were made")
                         for log in swapLogs:
@@ -91,12 +92,10 @@ def processBuyTransactionSwap(file, tx, log, tokenOut, tokenIn, uniswapPair, res
     tokenInSymbol = tokenIn.functions.symbol().call()
     if (tokenInSymbol == "WETH"):
         eth_amount = amount_in / 1e18
+        token_amount = amount_out / (10**tokenOut.functions.decimals().call())
     else:
         raise Exception("Transaction not processed in WETH or pair is disordered")
-    tokenOutAddress = uniswapPair.functions.token0.call()
-    tokenInAddress = uniswapPair.functions.token1.call()
-    multiplier = 10**(tokenOut.functions.decimals().call() - tokenIn.functions.decimals().call())  # ver si esto no es mejor meterlo en los if porque capaz depende del orden
-    file.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')},BUY,{tx.hash.hex()},{tokenInSymbol},{tokenOutSymbol},{tokenInAddress},{tokenOutAddress},{uniswapPair.address},{eth_amount/(multiplier*amount_out)},{eth_amount},{tx.gas},{tx.gasPrice},{reserves[:2]}\n")
+    file.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')},BUY,{tx.hash.hex()},{tokenInSymbol},{tokenOutSymbol},{tokenIn.address},{tokenOut.address},{uniswapPair.address},{eth_amount/token_amount},{eth_amount},{tx.gas},{tx.gasPrice},{reserves[:2]}\n")
     printDev("\t########### CAPTURED FILE WRITTEN ###########")
 
 def processSellTransactionSwap(file, tx, log, tokenOut, tokenIn, uniswapPair, reserves):
@@ -106,23 +105,11 @@ def processSellTransactionSwap(file, tx, log, tokenOut, tokenIn, uniswapPair, re
     tokenInSymbol = tokenIn.functions.symbol().call()
     if (tokenOutSymbol == "WETH"):
         eth_amount = amount_out / 1e18
+        token_amount = amount_in / (10**tokenIn.functions.decimals().call())
     else:
         raise Exception("Transaction not processed in WETH or pair is disordered")
-    tokenOutAddress = uniswapPair.functions.token1.call()
-    tokenInAddress = uniswapPair.functions.token0.call()
-    multiplier = 10**(tokenOut.functions.decimals().call() - tokenIn.functions.decimals().call())  # ver si esto no es mejor meterlo en los if porque capaz depende del orden
-    file.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')},SELL,{tx.hash.hex()},{tokenInSymbol},{tokenOutSymbol},{tokenInAddress},{tokenOutAddress},{uniswapPair.address},{(multiplier*eth_amount)/amount_in},{eth_amount},{tx.gas},{tx.gasPrice},{reserves[:2]}\n")
+    file.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')},SELL,{tx.hash.hex()},{tokenInSymbol},{tokenOutSymbol},{tokenIn.address},{tokenOut.address},{uniswapPair.address},{eth_amount/token_amount},{eth_amount},{tx.gas},{tx.gasPrice},{reserves[:2]}\n")
     printDev("\t########### CAPTURED FILE WRITTEN ###########")
-
-def get_amount_in(amount_out, reserve_in, reserve_out):
-    assert amount_out > 0, 'INSUFFICIENT_OUTPUT_AMOUNT'
-    assert reserve_in > 0 and reserve_out > 0, 'INSUFFICIENT_LIQUIDITY'
-
-    numerator = reserve_in * amount_out * 1000
-    denominator = (reserve_out - amount_out) * 997
-
-    amount_in = (numerator // denominator) + 1
-    return amount_in
 
 def printDev(message, newLine=True, end="\n"):
     global LOG_TO_FILE, LOG_TO_CONSOLE
@@ -167,7 +154,7 @@ if __name__ == "__main__":
                {"constant": True, "inputs": [], "name": "token1", "outputs": [{"internalType": "address", "name": "", "type": "address"}], "payable": False, "stateMutability": "view", "type": "function"},
                {"constant": True,"inputs":[],"name":"getReserves","outputs":[{"internalType":"uint112","name":"_reserve0","type":"uint112"},{"internalType":"uint112","name":"_reserve1","type":"uint112"},{"internalType":"uint32","name":"_blockTimestampLast","type":"uint32"}],"payable": False,"stateMutability":"view","type":"function"}]
     UniswapV2Router02 = w3.eth.contract(address="0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", abi=[{"inputs":[{"internalType":"uint256","name":"amountOut","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"}],"name":"getAmountsIn","outputs":[{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"stateMutability":"view","type":"function"}])
-    contractAddress = "0x50b8f49f4b2e80e09ce8015c4e7a9c277738fd3d"
+    contractAddress = "0x50B8f49f4B2E80e09cE8015C4e7A9c277738Fd3d"
     
     pendingMatchingTransactions = set({})
     pendingBlockNumber = w3.eth.block_number + 1
